@@ -60,7 +60,9 @@ def search_entities(
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(10, ge=1, le=100, description="Results per page")
 ):
-    query = q.lower() if q else ""
+    # Trim whitespace and handle None
+    query = q.strip().lower() if q and q.strip() else ""
+    
     method_filter = method.upper()
 
     all_results = []
@@ -97,7 +99,6 @@ def search_entities(
             'has_previous': page > 1
         }
     }
-
 
 @app.get("/api/entities/{method}")
 def get_entities_by_method(method: str):
