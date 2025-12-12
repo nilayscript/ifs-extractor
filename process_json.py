@@ -1,7 +1,24 @@
 import json
+import sys
+import os
+
+# Get input filename from command line argument or default to customerorder.json
+if len(sys.argv) > 1:
+    input_file = sys.argv[1]
+else:
+    input_file = 'customerorder.json'
+
+# Validate file exists
+if not os.path.exists(input_file):
+    print(f"Error: File '{input_file}' not found")
+    sys.exit(1)
+
+# Generate output filename (replace .json with -options.json)
+base_name = input_file.rsplit('.json', 1)[0]
+output_file = f"{base_name}-options.json"
 
 # Read the original JSON
-with open('customerorder.json', 'r', encoding='utf-8') as f:
+with open(input_file, 'r', encoding='utf-8') as f:
     data = json.load(f)
 
 id_counter = 1
@@ -63,13 +80,13 @@ for method in ["GET", "POST", "PATCH", "PUT", "DELETE"]:
         })
 
 # Write the modified JSON back
-with open('customerorder.json', 'w', encoding='utf-8') as f:
+with open(input_file, 'w', encoding='utf-8') as f:
     json.dump(data, f, indent=2)
-print('Updated customerorder.json with IDs')
+print(f'Updated {input_file} with IDs')
 
 # Write the options JSON
-with open('customerorder-options.json', 'w', encoding='utf-8') as f:
+with open(output_file, 'w', encoding='utf-8') as f:
     json.dump(options, f, indent=2)
-print('Created customerorder-options.json')
+print(f'Created {output_file}')
 
 print(f'Total IDs assigned: {id_counter - 1}')

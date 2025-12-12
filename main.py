@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 import json
 
-app = FastAPI(title="CustomerOrderHandling API", description="API to fetch IFS CustomerOrder entities")
+app = FastAPI(title="IFS API", description="API to fetch IFS entities")
 
 app.add_middleware(
     CORSMiddleware,
@@ -13,29 +13,53 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-with open('customerorder-options.json', 'r', encoding='utf-8') as f:
-    options_data = json.load(f)
+# API registry - stores all available APIs
+api_registry = {
+    1: {
+        "id": 1,
+        "name": "CustomerOrderHandling",
+        "options_file": "customerorder-options.json",
+        "data_file": "customerorder.json"
+    },
+    2: {
+        "id": 2,
+        "name": "SupplierHandling",
+        "options_file": "supplierhandling-options.json",
+        "data_file": "supplierhandling.json"
+    }
+}
 
-with open('customerorder.json', 'r', encoding='utf-8') as f:
-    full_data = json.load(f)
+# Load all API data
+api_data = {}
+for api_id, api_info in api_registry.items():
+    with open(api_info['options_file'], 'r', encoding='utf-8') as f:
+        options_data = json.load(f)
+    with open(api_info['data_file'], 'r', encoding='utf-8') as f:
+        full_data = json.load(f)
 
-entity_by_id = {}
+    entity_by_id = {}
 
-def build_entity_lookup(arr):
-    if not arr:
-        return
-    for item in arr:
-        if isinstance(item, dict) and 'id' in item:
-            entity_by_id[item['id']] = item
-            if 'nested_entities' in item:
-                for method in ['GET', 'POST', 'PATCH', 'PUT', 'DELETE']:
-                    if item['nested_entities'].get(method):
-                        build_entity_lookup(item['nested_entities'][method])
+    def build_entity_lookup(arr, lookup_dict):
+        if not arr:
+            return
+        for item in arr:
+            if isinstance(item, dict) and 'id' in item:
+                lookup_dict[item['id']] = item
+                if 'nested_entities' in item:
+                    for method in ['GET', 'POST', 'PATCH', 'PUT', 'DELETE']:
+                        if item['nested_entities'].get(method):
+                            build_entity_lookup(item['nested_entities'][method], lookup_dict)
 
-# Build lookup from full data
-for method in ['GET', 'POST', 'PATCH', 'PUT', 'DELETE']:
-    if full_data.get(method):
-        build_entity_lookup(full_data[method])
+    for method in ['GET', 'POST', 'PATCH', 'PUT', 'DELETE']:
+        if full_data.get(method):
+            build_entity_lookup(full_data[method], entity_by_id)
+
+    api_data[api_id] = {
+        "options": options_data,
+        "full": full_data,
+        "entity_by_id": entity_by_id
+    }
+
 
 
 @app.get("/")
@@ -43,26 +67,97 @@ def read_root():
     return {"message": "Hello, FastAPI!"}
 
 
-@app.get("/api/methods")
-def get_methods():
-    """Get all available HTTP methods"""
-    methods = [entity['method'] for entity in options_data['entities']]
+@app.get("/api/list")
+def get_api_list():
+    """Get list of all available APIs"""
     return {
-        'api': options_data['api'],
+        "apis": [
+            {"id": info["id"], "name": info["name"]}
+            for info in api_registry.values()
+        ]
+    }
+
+
+@app.get("/api/{api_id}/methods")
+def get_methods_by_api(api_id: int):
+    """Get all available HTTP methods for a specific API"""
+    if api_id not in api_data:
+        raise HTTPException(status_code=404, detail=f'API with ID {api_id} not found')
+
+    api_options = api_data[api_id]["options"]
+    methods = [entity['method'] for entity in api_options['entities']]
+    return {
+        'api_id': api_id,
+        'api': api_options['api'],
         'methods': methods
     }
 
 
-@app.get("/api/entities/search")
+@app.get("/api/{api_id}/entities")
+def get_all_entities_by_api(api_id: int):
+    """Get all entities for a specific API"""
+    if api_id not in api_data:
+        raise HTTPException(status_code=404, detail=f'API with ID {api_id} not found')
+
+    api_options = api_data[api_id]["options"]
+    return {
+        'api_id': api_id,
+        'api': api_options['api'],
+        'entities': api_options['entities']
+    }
+
+
+@app.get("/api/{api_id}/entities/{method}")
+def get_entities_by_api_and_method(api_id: int, method: str):
+    """Get all entities for a specific API and HTTP method"""
+    if api_id not in api_data:
+        raise HTTPException(status_code=404, detail=f'API with ID {api_id} not found')
+
+    method = method.upper()
+    api_options = api_data[api_id]["options"]
+
+    for entity_group in api_options['entities']:
+        if entity_group['method'] == method:
+            return {
+                'api_id': api_id,
+                'api': api_options['api'],
+                'method': method,
+                'entities': entity_group['items']
+            }
+
+    raise HTTPException(status_code=404, detail=f'Method {method} not found in API {api_id}')
+
+
+@app.get("/api/{api_id}/entity/{entity_id}")
+def get_entity_by_api_and_id(api_id: int, entity_id: int):
+    """Get entity details by API ID and entity ID"""
+    if api_id not in api_data:
+        raise HTTPException(status_code=404, detail=f'API with ID {api_id} not found')
+
+    entity_lookup = api_data[api_id]["entity_by_id"]
+    if entity_id not in entity_lookup:
+        raise HTTPException(status_code=404, detail=f'Entity with ID {entity_id} not found in API {api_id}')
+
+    return entity_lookup[entity_id]
+
+
+@app.get("/api/{api_id}/entities/search")
 def search_entities(
+    api_id: int,
     method: str = Query(..., description="HTTP method (GET, POST, PUT, PATCH, DELETE)"),
     q: Optional[str] = Query(None, description="Search query for entity name"),
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(10, ge=1, le=100, description="Results per page")
 ):
+    """Search entities with pagination for a specific API"""
+    if api_id not in api_data:
+        raise HTTPException(status_code=404, detail=f'API with ID {api_id} not found')
+
+    options_data = api_data[api_id]["options"]
+
     # Trim whitespace and handle None
     query = q.strip().lower() if q and q.strip() else ""
-    
+
     method_filter = method.upper()
 
     all_results = []
@@ -87,6 +182,8 @@ def search_entities(
     paginated_results = all_results[start_index:end_index]
 
     return {
+        'api_id': api_id,
+        'api': options_data['api'],
         'method': method_filter,
         'query': q,
         'results': paginated_results,
@@ -100,26 +197,19 @@ def search_entities(
         }
     }
 
-@app.get("/api/entities/{method}")
-def get_entities_by_method(method: str):
-    """Get all entities for a specific HTTP method (GET, POST, PUT, PATCH, DELETE)"""
-    method = method.upper()
 
-    for entity_group in options_data['entities']:
-        if entity_group['method'] == method:
-            return {
-                'method': method,
-                'entities': entity_group['items']
-            }
-
-    raise HTTPException(status_code=404, detail=f'Method {method} not found')
-
-
-@app.get("/api/entity/by-name")
+@app.get("/api/{api_id}/entity/by-name")
 def get_entity_by_name(
+    api_id: int,
     name: str = Query(..., description="Exact entity name"),
     method: Optional[str] = Query(None, description="HTTP method")
 ):
+    """Get entity by name for a specific API"""
+    if api_id not in api_data:
+        raise HTTPException(status_code=404, detail=f'API with ID {api_id} not found')
+
+    full_data = api_data[api_id]["full"]
+
     method_filter = method.upper() if method else None
     methods_to_search = [method_filter] if method_filter else ['GET', 'POST', 'PATCH', 'PUT', 'DELETE']
 
@@ -128,19 +218,12 @@ def get_entity_by_name(
             for item in full_data[m]:
                 if item.get('name') == name:
                     return {
+                        'api_id': api_id,
                         'method': m,
                         'entity': item
                     }
 
-    raise HTTPException(status_code=404, detail=f'Entity "{name}" not found')
-
-
-@app.get("/api/entity/{entity_id}")
-def get_entity_by_id(entity_id: int):
-    if entity_id not in entity_by_id:
-        raise HTTPException(status_code=404, detail=f'Entity with ID {entity_id} not found')
-
-    return entity_by_id[entity_id]
+    raise HTTPException(status_code=404, detail=f'Entity "{name}" not found in API {api_id}')
 
 
 if __name__ == "__main__":
