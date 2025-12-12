@@ -107,40 +107,6 @@ def get_all_entities_by_api(api_id: int):
     }
 
 
-@app.get("/api/{api_id}/entities/{method}")
-def get_entities_by_api_and_method(api_id: int, method: str):
-    """Get all entities for a specific API and HTTP method"""
-    if api_id not in api_data:
-        raise HTTPException(status_code=404, detail=f'API with ID {api_id} not found')
-
-    method = method.upper()
-    api_options = api_data[api_id]["options"]
-
-    for entity_group in api_options['entities']:
-        if entity_group['method'] == method:
-            return {
-                'api_id': api_id,
-                'api': api_options['api'],
-                'method': method,
-                'entities': entity_group['items']
-            }
-
-    raise HTTPException(status_code=404, detail=f'Method {method} not found in API {api_id}')
-
-
-@app.get("/api/{api_id}/entity/{entity_id}")
-def get_entity_by_api_and_id(api_id: int, entity_id: int):
-    """Get entity details by API ID and entity ID"""
-    if api_id not in api_data:
-        raise HTTPException(status_code=404, detail=f'API with ID {api_id} not found')
-
-    entity_lookup = api_data[api_id]["entity_by_id"]
-    if entity_id not in entity_lookup:
-        raise HTTPException(status_code=404, detail=f'Entity with ID {entity_id} not found in API {api_id}')
-
-    return entity_lookup[entity_id]
-
-
 @app.get("/api/{api_id}/entities/search")
 def search_entities(
     api_id: int,
@@ -196,6 +162,40 @@ def search_entities(
             'has_previous': page > 1
         }
     }
+
+
+@app.get("/api/{api_id}/entities/{method}")
+def get_entities_by_api_and_method(api_id: int, method: str):
+    """Get all entities for a specific API and HTTP method"""
+    if api_id not in api_data:
+        raise HTTPException(status_code=404, detail=f'API with ID {api_id} not found')
+
+    method = method.upper()
+    api_options = api_data[api_id]["options"]
+
+    for entity_group in api_options['entities']:
+        if entity_group['method'] == method:
+            return {
+                'api_id': api_id,
+                'api': api_options['api'],
+                'method': method,
+                'entities': entity_group['items']
+            }
+
+    raise HTTPException(status_code=404, detail=f'Method {method} not found in API {api_id}')
+
+
+@app.get("/api/{api_id}/entity/{entity_id}")
+def get_entity_by_api_and_id(api_id: int, entity_id: int):
+    """Get entity details by API ID and entity ID"""
+    if api_id not in api_data:
+        raise HTTPException(status_code=404, detail=f'API with ID {api_id} not found')
+
+    entity_lookup = api_data[api_id]["entity_by_id"]
+    if entity_id not in entity_lookup:
+        raise HTTPException(status_code=404, detail=f'Entity with ID {entity_id} not found in API {api_id}')
+
+    return entity_lookup[entity_id]
 
 
 @app.get("/api/{api_id}/entity/by-name")
