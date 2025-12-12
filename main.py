@@ -55,22 +55,22 @@ def get_methods():
 
 @app.get("/api/entities/search")
 def search_entities(
-    q: str = Query(..., description="Search query for entity name"),
-    method: Optional[str] = Query(None, description="Filter by HTTP method"),
+    method: str = Query(..., description="HTTP method (GET, POST, PUT, PATCH, DELETE)"),
+    q: Optional[str] = Query(None, description="Search query for entity name"),
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(10, ge=1, le=100, description="Results per page")
 ):
-    query = q.lower()
-    method_filter = method.upper() if method else None
+    query = q.lower() if q else ""
+    method_filter = method.upper()
 
     all_results = []
 
     for entity_group in options_data['entities']:
-        if method_filter and entity_group['method'] != method_filter:
+        if entity_group['method'] != method_filter:
             continue
 
         for item in entity_group['items']:
-            if query in item['name'].lower():
+            if not query or query in item['name'].lower():
                 all_results.append({
                     'method': entity_group['method'],
                     'name': item['name'],
@@ -85,6 +85,7 @@ def search_entities(
     paginated_results = all_results[start_index:end_index]
 
     return {
+        'method': method_filter,
         'query': q,
         'results': paginated_results,
         'pagination': {
