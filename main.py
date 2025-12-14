@@ -1,7 +1,8 @@
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, APIRouter, Body
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Optional
+from typing import Optional, Any
 import json
+import httpx
 
 app = FastAPI(title="IFS API", description="API to fetch IFS entities")
 
@@ -224,6 +225,55 @@ def get_entity_by_name(
                     }
 
     raise HTTPException(status_code=404, detail=f'Entity "{name}" not found in API {api_id}')
+
+
+# IFS API Proxy Routes
+IFS_BASE_URL = "https://ifsgcsc2-d02.demo.ifs.cloud/main/ifsapplications/projection/v1/CustomerOrderHandling.svc"
+
+ifs_router = APIRouter(prefix="/ifs-apis", tags=["IFS APIs"])
+
+
+@ifs_router.get("/customer-order/{order_no}")
+def get_customer_order(order_no: str, token: str = Query(..., description="Bearer auth token")):
+    """Get customer order by order number from IFS API"""
+    url = f"{IFS_BASE_URL}/CustomerOrderSet(OrderNo='{order_no}')"
+    headers = {"Authorization": f"Bearer {token}"}
+
+    try:
+        with httpx.Client() as client:
+            response = client.get(url, headers=headers)
+            response.raise_for_status()
+            return response.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=str(e))
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=500, detail=f"Request failed: {str(e)}")
+
+
+@ifs_router.patch("/customer-order/{order_no}")
+def update_customer_order(order_no: str, payload: Any = Body(...)):
+    """Update customer order by order number in IFS API"""
+    url = f"{IFS_BASE_URL}/CustomerOrderSet(OrderNo='{order_no}')"
+
+    # Extract token from payload
+    token = payload.pop("token", None)
+    if not token:
+        raise HTTPException(status_code=400, detail="token is required in payload")
+
+    headers = {"Authorization": f"Bearer {token}"}
+
+    try:
+        with httpx.Client() as client:
+            response = client.patch(url, json=payload, headers=headers)
+            response.raise_for_status()
+            return response.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=str(e))
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=500, detail=f"Request failed: {str(e)}")
+
+
+app.include_router(ifs_router)
 
 
 if __name__ == "__main__":
