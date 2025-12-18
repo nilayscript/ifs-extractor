@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, Any
 import json
 import httpx
+import glob
+import os
 
 app = FastAPI(title="IFS API", description="API to fetch IFS entities")
 
@@ -14,21 +16,45 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# API registry - stores all available APIs
-api_registry = {
-    1: {
-        "id": 1,
-        "name": "CustomerOrderHandling",
-        "options_file": "customerorder-options.json",
-        "data_file": "customerorder.json"
-    },
-    2: {
-        "id": 2,
-        "name": "SupplierHandling",
-        "options_file": "supplierhandling-options.json",
-        "data_file": "supplierhandling.json"
-    }
-}
+# Directories
+OPTIONS_DIR = 'options'
+PARSED_DATA_DIR = 'parsed_data'
+
+
+def load_api_registry():
+    """Dynamically load API registry from options folder."""
+    registry = {}
+
+    # Find all options files
+    options_files = glob.glob(os.path.join(OPTIONS_DIR, '*-options.json'))
+
+    for idx, options_file in enumerate(sorted(options_files), start=1):
+        filename = os.path.basename(options_file)
+        # Extract base name: customerorder-options.json -> customerorder
+        base_name = filename.replace('-options.json', '')
+        data_file = os.path.join(PARSED_DATA_DIR, f"{base_name}.json")
+
+        # Check if corresponding data file exists
+        if not os.path.exists(data_file):
+            print(f"Warning: Data file not found for {filename}, skipping...")
+            continue
+
+        # Load options to get API name
+        with open(options_file, 'r', encoding='utf-8') as f:
+            options_data = json.load(f)
+
+        registry[idx] = {
+            "id": idx,
+            "name": options_data.get('api', base_name),
+            "options_file": options_file,
+            "data_file": data_file
+        }
+
+    return registry
+
+
+# Dynamically build API registry from options folder
+api_registry = load_api_registry()
 
 # Load all API data
 api_data = {}
