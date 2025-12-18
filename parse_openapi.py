@@ -537,19 +537,6 @@ def generate_simplified_output(parsed_data: dict) -> dict:
             result.append(field_entry)
         return result
 
-    def camel_to_readable(name: str) -> str:
-        """Convert camelCase or PascalCase to readable text.
-
-        Examples:
-            CalculateOrderDiscount -> Calculate Order Discount
-            SetCancelled -> Set Cancelled
-            CustomerOrderSet -> Customer Order Set
-        """
-        import re
-        # Insert space before uppercase letters (but not at start)
-        result = re.sub(r'(?<!^)(?=[A-Z])', ' ', name)
-        return result
-
     def extract_action_name_from_path(path: str) -> str:
         """Extract action/function name from IfsApp path.
 
@@ -620,75 +607,39 @@ def generate_simplified_output(parsed_data: dict) -> dict:
         return None
 
     def get_primary_key(path_params: list) -> str:
-        """Get the primary key from path parameters.
-
-        Returns the first path param as primary key.
-        Common primary keys: OrderNo, Objkey, Contract, etc.
-        """
+        """Get the primary key from path parameters."""
         if not path_params:
             return None
         return path_params[0].get('key', path_params[0].get('name', ''))
 
-    def generate_api_name(method: str, entity_name: str, path_params: list, action_name: str = None, nested_resource: str = None) -> str:
-        """Generate a readable API name based on method, entity, and params.
+    def generate_api_name(entity_name: str, path_params: list, action_name: str = None, nested_resource: str = None) -> str:
+        """Generate API name: EntityName or EntityName by KeyParam.
 
-        Naming convention:
-        - GET (no params): List {EntityName}
-        - GET (with params): Get {EntityName} by {PrimaryKey}
-        - GET (with nested resource): Get {EntityName} {NestedResource} by {PrimaryKey}
-        - POST (no params): Create {EntityName}
-        - POST (with params - action): {ActionName} (readable)
-        - PATCH (with params): Update {EntityName} by {PrimaryKey}
-        - DELETE (with params): Delete {EntityName} by {PrimaryKey}
-        - Functions/Actions: Convert to readable text, add "by {Key}" if has params
+        Simple naming convention:
+        - No params: EntityName (e.g., CustomerOrderSet)
+        - With params: EntityName by KeyParam (e.g., CustomerOrderSet by OrderNo)
+        - Actions: ActionName or ActionName by KeyParam
+        - Nested: EntityName/NestedResource by KeyParam
         """
         has_params = path_params and len(path_params) > 0
         primary_key = get_primary_key(path_params) if has_params else None
-        readable_entity = camel_to_readable(entity_name)
-
-        # Add nested resource to entity name if present
-        if nested_resource:
-            readable_nested = camel_to_readable(nested_resource)
-            readable_entity = f"{readable_entity} {readable_nested}"
 
         # If it's an action/function, use the action name
         if action_name:
-            readable_action = camel_to_readable(action_name)
-            # Add "by {PrimaryKey}" to distinguish item-level from collection-level actions
             if has_params:
-                return f"{readable_action} by {primary_key}"
-            return readable_action
+                return f"{action_name} by {primary_key}"
+            return action_name
 
-        # Generate name based on method
-        if method == 'GET':
-            if has_params:
-                return f"Get {readable_entity} by {primary_key}"
-            else:
-                return f"List {readable_entity}"
-        elif method == 'POST':
-            if has_params:
-                # POST with params but no action name - unusual, use entity name
-                return f"Create {readable_entity}"
-            else:
-                return f"Create {readable_entity}"
-        elif method == 'PATCH':
-            if has_params:
-                return f"Update {readable_entity} by {primary_key}"
-            else:
-                return f"Update {readable_entity}"
-        elif method == 'PUT':
-            if has_params:
-                return f"Replace {readable_entity} by {primary_key}"
-            else:
-                return f"Replace {readable_entity}"
-        elif method == 'DELETE':
-            if has_params:
-                return f"Delete {readable_entity} by {primary_key}"
-            else:
-                return f"Delete {readable_entity}"
+        # Build base name with optional nested resource
+        if nested_resource:
+            base_name = f"{entity_name}/{nested_resource}"
+        else:
+            base_name = entity_name
 
-        # Fallback
-        return readable_entity
+        # Add "by KeyParam" if has path parameters
+        if has_params:
+            return f"{base_name} by {primary_key}"
+        return base_name
 
     def process_api(api: dict, include_nested: bool = False, nested_list: list = None, entity_name_override: str = None) -> dict:
         """Process a single API into simplified format."""
@@ -717,18 +668,16 @@ def generate_simplified_output(parsed_data: dict) -> dict:
         payload_fields = get_payload_fields(api)
         response_fields = get_response_fields(api)
 
-        # Extract name using new naming convention
+        # Extract name using simple naming convention
         if entity_name_override:
             name = entity_name_override
         else:
-            # Check if this is an action/function URL (contains /IfsApp.)
             action_name = extract_action_name_from_path(path)
             entity_name = extract_entity_name_from_path(path)
             nested_resource = extract_nested_resource_from_path(path)
-            method = api['method']
 
-            # Generate readable name based on method, entity, params, action, and nested resource
-            name = generate_api_name(method, entity_name, path_params_with_types, action_name, nested_resource)
+            # Generate name: EntityName or EntityName by KeyParam
+            name = generate_api_name(entity_name, path_params_with_types, action_name, nested_resource)
 
         result = {
             'id': None,  # Will be assigned after sorting
@@ -783,10 +732,10 @@ def generate_simplified_output(parsed_data: dict) -> dict:
                         param_entry['enum'] = p['enum']
                     path_params_with_types.append(param_entry)
 
-            # Generate name using new naming convention
+            # Generate name: EntityName or EntityName by KeyParam
             action_name = extract_action_name_from_path(api_path)
             nested_resource = extract_nested_resource_from_path(api_path)
-            name = generate_api_name(method, nested_entity_name, path_params_with_types, action_name, nested_resource)
+            name = generate_api_name(nested_entity_name, path_params_with_types, action_name, nested_resource)
 
             nested_api_info = {
                 'id': None,  # Will be assigned after sorting
@@ -873,11 +822,8 @@ def generate_simplified_output(parsed_data: dict) -> dict:
                 if entity_prefix.endswith('Set'):
                     entity_prefix = entity_prefix[:-3]
 
-                # Convert entity prefix to readable format
-                readable_prefix = camel_to_readable(entity_prefix)
-
-                # Create unique name: ReadablePrefix - ActionName
-                api['name'] = f"{readable_prefix} - {api['name']}"
+                # Create unique name: EntityPrefix_ActionName
+                api['name'] = f"{entity_prefix}_{api['name']}"
 
         # Second pass: check if duplicates remain (same entity, different params)
         name_counts = Counter(api['name'] for api in apis)
