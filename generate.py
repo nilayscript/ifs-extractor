@@ -4,7 +4,6 @@ IFS API Data Generator
 Complete pipeline to:
 1. Parse OpenAPI JSON files from data/ folder
 2. Generate options files for UI
-3. Upload parsed_data and options to S3
 
 Usage: python generate.py
 """
@@ -12,8 +11,8 @@ Usage: python generate.py
 import json
 import os
 import glob
-import boto3
-from botocore.exceptions import ClientError
+# import boto3
+# from botocore.exceptions import ClientError
 from parse_openapi1 import parse_openapi_spec, generate_simplified_output
 
 
@@ -22,13 +21,6 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(SCRIPT_DIR, 'data')
 PARSED_DATA_DIR = os.path.join(SCRIPT_DIR, 'parsed_data')
 OPTIONS_DIR = os.path.join(SCRIPT_DIR, 'options')
-
-# S3 Configuration
-S3_ACCESS_KEY = '<ACCESS_KEY>'
-S3_SECRET_KEY = '<SECRET_ACCESS_KEY>'
-S3_REGION = '<REGION>'
-S3_BUCKET = 'ngage-ifs-api-ai-data'
-S3_BASE_URL = f"https://{S3_BUCKET}.s3.{S3_REGION}.amazonaws.com"
 
 
 def ensure_directories():
@@ -117,54 +109,54 @@ def process_options(input_file: str, output_file: str) -> dict:
     }
 
 
-def get_s3_client():
-    """Create and return an S3 client."""
-    return boto3.client(
-        's3',
-        aws_access_key_id=S3_ACCESS_KEY,
-        aws_secret_access_key=S3_SECRET_KEY,
-        region_name=S3_REGION
-    )
+# def get_s3_client():
+#     """Create and return an S3 client."""
+#     return boto3.client(
+#         's3',
+#         aws_access_key_id=S3_ACCESS_KEY,
+#         aws_secret_access_key=S3_SECRET_KEY,
+#         region_name=S3_REGION
+#     )
 
 
-def upload_file_to_s3(s3_client, local_path: str, s3_key: str) -> bool:
-    """Upload a file to S3 bucket."""
-    try:
-        s3_client.upload_file(
-            local_path,
-            S3_BUCKET,
-            s3_key,
-            ExtraArgs={'ContentType': 'application/json'}
-        )
-        return True
-    except (ClientError, FileNotFoundError) as e:
-        print(f"  Error uploading {local_path}: {e}")
-        return False
+# def upload_file_to_s3(s3_client, local_path: str, s3_key: str) -> bool:
+#     """Upload a file to S3 bucket."""
+#     try:
+#         s3_client.upload_file(
+#             local_path,
+#             S3_BUCKET,
+#             s3_key,
+#             ExtraArgs={'ContentType': 'application/json'}
+#         )
+#         return True
+#     except (ClientError, FileNotFoundError) as e:
+#         print(f"  Error uploading {local_path}: {e}")
+#         return False
 
 
-def upload_directory_to_s3(s3_client, local_dir: str, s3_prefix: str) -> tuple:
-    """Upload all JSON files from a local directory to S3."""
-    success_count = 0
-    total_count = 0
+# def upload_directory_to_s3(s3_client, local_dir: str, s3_prefix: str) -> tuple:
+#     """Upload all JSON files from a local directory to S3."""
+#     success_count = 0
+#     total_count = 0
 
-    if not os.path.exists(local_dir):
-        print(f"  Directory not found: {local_dir}")
-        return 0, 0
+#     if not os.path.exists(local_dir):
+#         print(f"  Directory not found: {local_dir}")
+#         return 0, 0
 
-    for file_name in sorted(os.listdir(local_dir)):
-        if file_name.endswith('.json') and not file_name.startswith('.'):
-            total_count += 1
-            local_path = os.path.join(local_dir, file_name)
-            s3_key = f"{s3_prefix}/{file_name}"
-            s3_url = f"{S3_BASE_URL}/{s3_key}"
+#     for file_name in sorted(os.listdir(local_dir)):
+#         if file_name.endswith('.json') and not file_name.startswith('.'):
+#             total_count += 1
+#             local_path = os.path.join(local_dir, file_name)
+#             s3_key = f"{s3_prefix}/{file_name}"
+#             s3_url = f"{S3_BASE_URL}/{s3_key}"
 
-            if upload_file_to_s3(s3_client, local_path, s3_key):
-                print(f"  ✓ {file_name} -> {s3_url}")
-                success_count += 1
-            else:
-                print(f"  ✗ {file_name} FAILED")
+#             if upload_file_to_s3(s3_client, local_path, s3_key):
+#                 print(f"  ✓ {file_name} -> {s3_url}")
+#                 success_count += 1
+#             else:
+#                 print(f"  ✗ {file_name} FAILED")
 
-    return success_count, total_count
+#     return success_count, total_count
 
 
 def step1_parse_data():
@@ -264,35 +256,35 @@ def step2_generate_options():
     return options_files
 
 
-def step3_upload_to_s3():
-    """Step 3: Upload parsed_data and options to S3."""
-    print("\n" + "=" * 60)
-    print("STEP 3: Uploading to S3")
-    print("=" * 60)
+# def step3_upload_to_s3():
+#     """Step 3: Upload parsed_data and options to S3."""
+#     print("\n" + "=" * 60)
+#     print("STEP 3: Uploading to S3")
+#     print("=" * 60)
 
-    try:
-        s3_client = get_s3_client()
-    except Exception as e:
-        print(f"Failed to create S3 client: {e}")
-        return False
+#     try:
+#         s3_client = get_s3_client()
+#     except Exception as e:
+#         print(f"Failed to create S3 client: {e}")
+#         return False
 
-    total_success = 0
-    total_files = 0
+#     total_success = 0
+#     total_files = 0
 
-    # Upload parsed_data files
-    print(f"\nUploading parsed_data/")
-    success, count = upload_directory_to_s3(s3_client, PARSED_DATA_DIR, 'parsed_data')
-    total_success += success
-    total_files += count
+#     # Upload parsed_data files
+#     print(f"\nUploading parsed_data/")
+#     success, count = upload_directory_to_s3(s3_client, PARSED_DATA_DIR, 'parsed_data')
+#     total_success += success
+#     total_files += count
 
-    # Upload options files
-    print(f"\nUploading options/")
-    success, count = upload_directory_to_s3(s3_client, OPTIONS_DIR, 'options')
-    total_success += success
-    total_files += count
+#     # Upload options files
+#     print(f"\nUploading options/")
+#     success, count = upload_directory_to_s3(s3_client, OPTIONS_DIR, 'options')
+#     total_success += success
+#     total_files += count
 
-    print(f"\nUploaded {total_success}/{total_files} file(s) to S3")
-    return total_success == total_files
+#     print(f"\nUploaded {total_success}/{total_files} file(s) to S3")
+#     return total_success == total_files
 
 
 def main():
@@ -313,19 +305,12 @@ def main():
         print("\nNo options files were generated. Exiting.")
         return
 
-    # Step 3: Upload to S3
-    upload_success = step3_upload_to_s3()
-
     # Summary
     print("\n" + "=" * 60)
     print("GENERATION COMPLETE")
     print("=" * 60)
     print(f"Parsed data:  {PARSED_DATA_DIR}/ ({len(parsed_files)} files)")
     print(f"Options:      {OPTIONS_DIR}/ ({len(options_files)} files)")
-    print(f"S3 Upload:    {'✓ Success' if upload_success else '✗ Some failed'}")
-    print(f"\nS3 URLs:")
-    print(f"  {S3_BASE_URL}/parsed_data/<filename>.json")
-    print(f"  {S3_BASE_URL}/options/<filename>-options.json")
     print("=" * 60 + "\n")
 
 
